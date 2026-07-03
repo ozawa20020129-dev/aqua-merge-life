@@ -1,5 +1,5 @@
 import Fish from './Fish.js';
-import { FishMaster, drawGachaFromMaster } from './FishMaster.js'; // ★ マスターデータを読み込み
+import { FishMaster, drawGachaFromMaster } from './FishMaster.js';
 
 window.saveGameState = function(scene) {
     if (scene.scene.key === 'AquariumScene' && scene.fishes) {
@@ -36,13 +36,22 @@ class BootScene extends Phaser.Scene {
             this.registry.set('max_capacity', data.max_capacity || 3);
             
             let aquariumFishes = data.aquarium_fishes || [];
+            
+            // ★ セーブデータ内の古いテストお魚IDを新しいIDへ自動変換して救済
+            aquariumFishes = aquariumFishes.map(fish => {
+                if (fish.id === 'F_001') fish.id = 'F_C11';
+                if (fish.id === 'F_002') fish.id = 'F_R01';
+                if (fish.id === 'F_003') fish.id = 'F_R02';
+                return fish;
+            });
+
             let lastPlayed = data.last_played || Date.now();
             let offlineSeconds = Math.floor((Date.now() - lastPlayed) / 1000);
             
             if (offlineSeconds > 0 && aquariumFishes.length > 0) {
                 aquariumFishes.forEach(fish => {
                     fish.current_hunger = Math.max(0, fish.current_hunger - (fish.decay_rate * offlineSeconds));
-                    offlineDrops += Math.floor(offlineSeconds / 10);
+                    offlineDrops += Math.floor(offlineSeconds / 300);
                 });
                 offlineDrops = Math.min(50, offlineDrops);
             }
@@ -119,9 +128,7 @@ class GachaScene extends Phaser.Scene {
     }
 
     drawGacha(resultText) {
-        // ★ FishMasterから確率に基づいてお魚を引く
         let resultItem = drawGachaFromMaster();
-
         let colorMap = { 'Common': '#ffffff', 'Rare': '#00ffff', 'SuperRare': '#ff8800', 'Ultra': '#ff00ff', 'Secret': '#ff0000' };
         resultText.setFill(colorMap[resultItem.rarity]);
         resultText.setText('ぐるぐる...');
@@ -144,7 +151,6 @@ class GachaScene extends Phaser.Scene {
 
 class CollectionScene extends Phaser.Scene {
     constructor() { super('CollectionScene'); }
-    
     create() {
         let bg = this.add.graphics();
         bg.fillGradientStyle(0x112233, 0x112233, 0x224455, 0x224455, 1);
@@ -155,15 +161,12 @@ class CollectionScene extends Phaser.Scene {
 
         this.add.text(640, 50, '📖 お魚図鑑 (全102種)', { fontSize: '40px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
 
-        // ★ ページネーション設定 (1ページあたり 2列 x 4行 = 8件)
         this.currentPage = 0;
         this.itemsPerPage = 8;
         this.maxPage = Math.ceil(FishMaster.length / this.itemsPerPage) - 1;
 
         this.collection = this.registry.get('collection');
         this.pageContainer = this.add.container(0, 0);
-        
-        // ページ切り替えUI
         this.pageText = this.add.text(640, 680, '', { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
         
         let prevBtn = this.add.text(450, 680, '◀ 前のページ', { fontSize: '24px', backgroundColor: '#444', padding:{x:10,y:5} }).setOrigin(0.5).setInteractive({ useHandCursor: true });
@@ -183,8 +186,8 @@ class CollectionScene extends Phaser.Scene {
         let pageItems = FishMaster.slice(startIndex, startIndex + this.itemsPerPage);
 
         pageItems.forEach((fish, i) => {
-            let col = i % 2; // 0=左列, 1=右列
-            let row = Math.floor(i / 2); // 0〜3行目
+            let col = i % 2; 
+            let row = Math.floor(i / 2); 
             let xPos = col === 0 ? 320 : 960;
             let yPos = 160 + (row * 130);
 
@@ -197,14 +200,14 @@ class CollectionScene extends Phaser.Scene {
 
             if (isUnlocked) {
                 this.pageContainer.add([
-                    this.add.text(xPos - 250, yPos, fish.emoji, { fontSize: '60px' }).setOrigin(0, 0.5),
+                    this.add.text(xPos - 250, yPos, fish.emoji_char, { fontSize: '60px' }).setOrigin(0, 0.5),
                     this.add.text(xPos - 150, yPos - 25, `[${fish.rarity}] ${fish.name}`, { fontSize: '24px', fill: '#00ffff', fontStyle: 'bold' }),
                     this.add.text(xPos - 150, yPos + 15, fish.desc, { fontSize: '18px', fill: '#cccccc' })
                 ]);
             } else {
                 this.pageContainer.add([
                     this.add.text(xPos - 250, yPos, '❓', { fontSize: '60px' }).setOrigin(0, 0.5),
-                    this.add.text(xPos - 150, yPos, `No.${startIndex + i + 1} 未発見`, { fontSize: '24px', fill: '#666666', fontStyle: 'bold' }).setOrigin(0, 0.5)
+                    this.add.text(xPos - 150, yPos, `No.${startIndex + i + 1} 未発見`, { fontSize: '24px', fill: '#666666', fontStyle: 'bold' }).setOrigin(0.5)
                 ]);
             }
         });
@@ -215,11 +218,8 @@ class AquariumScene extends Phaser.Scene {
     constructor() { super('AquariumScene'); }
     
     preload() {
-        // ★ FishMasterから使用されているすべてのユニークな絵文字を抽出してテクスチャを生成
-        let uniqueEmojis = [...new Set(FishMaster.map(f => f.emoji))];
-        uniqueEmojis.forEach(emoji => {
-            let tempFish = FishMaster.find(f => f.emoji === emoji);
-            this.createEmojiTexture(emoji, tempFish.id, 64);
+        FishMaster.forEach(fish => {
+            this.createEmojiTexture(fish.emoji_char, fish.id, 64);
         });
         
         this.createEmojiTexture('🦐', 'item_food', 40);
@@ -277,6 +277,7 @@ class AquariumScene extends Phaser.Scene {
         this.inventoryContainer = this.add.container(0, 0).setDepth(100).setVisible(false);
         this.shopContainer = this.add.container(0, 0).setDepth(100).setVisible(false);
         this.deathContainer = this.add.container(0, 0).setDepth(110).setVisible(false);
+        this.statusContainer = this.add.container(0, 0).setDepth(120).setVisible(false);
 
         this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
             gameObject.body.setAllowGravity(false);
@@ -287,6 +288,13 @@ class AquariumScene extends Phaser.Scene {
 
         this.input.on('dragend', (pointer, gameObject) => {
             gameObject.body.setAllowGravity(true);
+            
+            let distance = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.upX, pointer.upY);
+            if (distance < 5) {
+                this.collectItem(gameObject);
+                return;
+            }
+
             let merged = false;
             this.items.getChildren().forEach((otherItem) => {
                 if (merged || otherItem === gameObject) return;
@@ -310,16 +318,7 @@ class AquariumScene extends Phaser.Scene {
                 item.setCollideWorldBounds(true);
                 item.setBounce(0.2);
                 item.setInteractive({ useHandCursor: true });
-                if (isPoop) {
-                    item.on('pointerdown', () => {
-                        item.destroy();
-                        let coins = this.registry.get('coins');
-                        this.registry.set('coins', coins + 1);
-                        this.coinText.setText(`💰 コイン: ${this.registry.get('coins')}`);
-                    });
-                } else {
-                    this.input.setDraggable(item);
-                }
+                this.input.setDraggable(item);
             }
             this.registry.set('offline_drops', 0);
             let notify = this.add.text(640, 360, `オフライン報酬として\n${drops}個のアイテムを発見！`, { fontSize: '40px', fill: '#ffff00', fontStyle: 'bold', align: 'center', backgroundColor: '#000000aa' }).setOrigin(0.5);
@@ -329,11 +328,43 @@ class AquariumScene extends Phaser.Scene {
         this.lastSaveTime = 0;
     }
 
-    update(time, delta) {
-        if (time - this.lastSaveTime > 5000) {
-            window.saveGameState(this);
-            this.lastSaveTime = time;
-        }
+    collectItem(item) {
+        const priceMap = { 'item_poop': 1, 'item_L1': 5, 'item_L2': 25, 'item_L3': 120, 'item_L4': 600, 'item_L5': 3000 };
+        let price = priceMap[item.itemType] || 1;
+        let coins = this.registry.get('coins');
+        this.registry.set('coins', coins + price);
+        this.coinText.setText(`💰 コイン: ${this.registry.get('coins')}`);
+
+        let eff = this.add.text(item.x, item.y, `+${price}💰`, { fontSize: '24px', fill: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5);
+        this.tweens.add({ targets: eff, y: item.y - 60, alpha: 0, duration: 1000, onComplete: () => eff.destroy() });
+
+        item.destroy();
+        window.saveGameState(this);
+    }
+
+    showFishStatusDialog(fish) {
+        this.statusContainer.removeAll(true);
+        this.statusContainer.setVisible(true);
+
+        let modalBg = this.add.graphics();
+        modalBg.fillStyle(0x000000, 0.85);
+        modalBg.fillRect(390, 150, 500, 420);
+        this.statusContainer.add(modalBg);
+
+        let master = FishMaster.find(f => f.id === fish.fish_type_id) || { name: '不明な魚', rarity: 'Common', emoji_char: '🐟' };
+
+        this.statusContainer.add([
+            this.add.text(640, 190, `${master.emoji_char} お魚のステータス`, { fontSize: '32px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5),
+            this.add.text(440, 260, `名前: ${master.name}`, { fontSize: '24px', fill: '#00ffff' }),
+            this.add.text(440, 310, `レアリティ: ${master.rarity}`, { fontSize: '24px', fill: '#ffcc00' }),
+            this.add.text(440, 360, `空腹度: ${Math.floor(fish.current_hunger)} / ${fish.max_hunger} %`, { fontSize: '24px', fill: '#fff' }),
+            this.add.text(440, 410, `好感度: ${Math.floor(fish.current_affection)} / 100 %`, { fontSize: '24px', fill: '#fff' }),
+            this.add.text(440, 460, `状態: ${fish.status_state}`, { fontSize: '24px', fill: fish.status_state === 'ANXIOUS' ? '#ff8888' : '#88ff88' })
+        ]);
+
+        let closeBtn = this.add.text(640, 530, '✖ 閉じる', { fontSize: '22px', fill: '#fff', backgroundColor: '#555', padding: { x: 20, y: 8 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        closeBtn.on('pointerdown', () => this.statusContainer.setVisible(false));
+        this.statusContainer.add(closeBtn);
     }
 
     updateCapacityText() {
@@ -434,9 +465,9 @@ class AquariumScene extends Phaser.Scene {
 
         if (nextType === 'MAX') {
             let coins = this.registry.get('coins');
-            this.registry.set('coins', coins + 1000);
+            this.registry.set('coins', coins + 5000); 
             this.coinText.setText(`💰 コイン: ${this.registry.get('coins')}`);
-            let bonusText = this.add.text(mergeX, mergeY, '+1000 コイン!', { fontSize: '32px', fill: '#ffff00', fontStyle: 'bold' }).setOrigin(0.5);
+            let bonusText = this.add.text(mergeX, mergeY, '+5000 コイン!', { fontSize: '32px', fill: '#ffff00', fontStyle: 'bold' }).setOrigin(0.5);
             this.tweens.add({ targets: bonusText, y: mergeY - 50, alpha: 0, duration: 2000, onComplete: () => bonusText.destroy() });
             window.saveGameState(this);
         } else {
