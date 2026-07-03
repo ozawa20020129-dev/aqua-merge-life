@@ -19,8 +19,8 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
         this.swimSpeed = 40;
         this.isWaiting = false;
 
-        // ★ ANXIOUSの場合は60秒固定、それ以外は10秒(テスト用)
-        this.drop_timer = this.status_state === 'ANXIOUS' ? 60 : 10;
+        // ★ ドロップ頻度を大幅にのんびり化 (通常時 300秒=5分 / 不機嫌時 900秒=15分)
+        this.drop_timer = this.status_state === 'ANXIOUS' ? 900 : 300;
         this.setRandomWaypoint();
         
         this.decayTimer = scene.time.addEvent({
@@ -30,19 +30,23 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
             loop: true
         });
 
-        // 状態に応じた初期カラー・向きの反映
         if (this.status_state === 'ANXIOUS') this.setTint(0xff9999);
         if (this.status_state === 'DEAD') {
             this.setTint(0x555555);
             this.setFlipY(true);
         }
 
-        // ★ 死亡時のタップ判定を追加
+        // タップ/クリック判定
         this.setInteractive({ useHandCursor: true });
         this.on('pointerdown', () => {
             if (this.status_state === 'DEAD') {
                 if (this.scene.showDeathDialog) {
                     this.scene.showDeathDialog(this);
+                }
+            } else {
+                // ★ 生きている魚を触ったらステータス画面を出す
+                if (this.scene.showFishStatusDialog) {
+                    this.scene.showFishStatusDialog(this);
                 }
             }
         });
@@ -56,7 +60,7 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
     update(time, delta) {
         if (this.status_state === 'DEAD') {
             this.scene.physics.moveTo(this, this.x, this.y, 0);
-            this.setVelocity(0, -20); // 浮上
+            this.setVelocity(0, -20); 
             return;
         }
 
@@ -103,22 +107,21 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
         } else if (this.current_hunger === 0 && this.current_affection === 0) {
             this.status_state = 'DEAD';
             this.setTint(0x555555);
-            this.setFlipY(true); // 死んだら反転
+            this.setFlipY(true); 
         } else {
             this.status_state = 'NORMAL';
             this.clearTint();
         }
 
-        // ANXIOUSに遷移した瞬間にタイマーを60秒にリセット
+        // ANXIOUSになった瞬間タイマーを900秒（15分）に
         if (previous_state !== 'ANXIOUS' && this.status_state === 'ANXIOUS') {
-            this.drop_timer = 60;
+            this.drop_timer = 900;
         }
 
         this.drop_timer -= dt;
         if (this.drop_timer <= 0) {
             this.dropItem();
-            // ドロップ後、状態に応じてタイマーをリセット
-            this.drop_timer = this.status_state === 'ANXIOUS' ? 60 : 10;
+            this.drop_timer = this.status_state === 'ANXIOUS' ? 900 : 300;
         }
     }
 
@@ -128,7 +131,6 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
         let isPoop = false;
         let type = 'item_L1';
 
-        // ★ ANXIOUS状態のペナルティ：強制的にうんこになる
         if (this.status_state === 'ANXIOUS') {
             isPoop = true;
             type = 'item_poop';
@@ -144,16 +146,7 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
         item.setBounce(0.2);
         item.setInteractive({ useHandCursor: true });
         
-        if (isPoop) {
-            item.on('pointerdown', () => {
-                item.destroy();
-                let coins = this.scene.registry.get('coins');
-                this.scene.registry.set('coins', coins + 1);
-                if (this.scene.coinText) this.scene.coinText.setText(`💰 コイン: ${this.scene.registry.get('coins')}`);
-                window.saveGameState(this.scene);
-            });
-        } else {
-            this.scene.input.setDraggable(item);
-        }
+        // ドラッグイベント側でクリック回収とマージを識別
+        this.scene.input.setDraggable(item);
     }
 }
