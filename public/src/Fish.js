@@ -27,7 +27,6 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
         this.swimSpeed = 40;
         this.isWaiting = false;
 
-        // ★ ひらっぱなし放置で意味がある時間に調整（通常時 60秒=1分 / 不機嫌時 180秒=3分）
         this.drop_timer = this.status_state === 'ANXIOUS' ? 180 : 60;
         this.setRandomWaypoint();
         
@@ -59,6 +58,7 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
         this.targetY = Phaser.Math.Between(150, 650);
     }
 
+    // ★ 毎フレームの行動AIをアップデート
     update(time, delta) {
         if (this.status_state === 'DEAD') {
             this.scene.physics.moveTo(this, this.x, this.y, 0);
@@ -66,6 +66,25 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
             return;
         }
 
+        // ★ 【エサ追跡AI】お腹が減っていて、水槽内にエサが存在する場合
+        if (this.current_hunger < this.max_hunger && this.scene.foods && this.scene.foods.getChildren().length > 0) {
+            // 自分から一番距離が近いエサを1個ロックオンする
+            let closestFood = this.scene.physics.closest(this, this.scene.foods.getChildren());
+            if (closestFood) {
+                this.isWaiting = false; // 待機をキャンセルして動く
+                this.scene.physics.moveToObject(this, closestFood, this.swimSpeed + 20); // エサ時は少し早く泳ぐ
+                
+                // エサの方向に合わせて顔の向きを変える
+                if (this.body.velocity.x > 0) {
+                    this.setFlipX(false);
+                } else if (this.body.velocity.x < 0) {
+                    this.setFlipX(true);
+                }
+                return; // エサに向かっている時は、以降のランダム遊泳の目的地処理をスキップする
+            }
+        }
+
+        // --- エサがない、または満腹の時はいつもの気ままなランダム遊泳 ---
         const distance = Phaser.Math.Distance.Between(this.x, this.y, this.targetX, this.targetY);
 
         if (distance < 10) {
@@ -125,7 +144,6 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
             this.clearTint();
         }
 
-        // ANXIOUSになった瞬間タイマーを180秒（3分）にリセット
         if (previous_state !== 'ANXIOUS' && this.status_state === 'ANXIOUS') {
             this.drop_timer = 180;
         }
