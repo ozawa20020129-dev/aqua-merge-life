@@ -46,6 +46,7 @@ const config = {
     type: Phaser.AUTO,
     width: 360,
     height: 640,
+    parent: 'game-container', // ←この1行を追加！
     physics: {
         default: 'arcade',
         arcade: { gravity: { y: 0 } }
