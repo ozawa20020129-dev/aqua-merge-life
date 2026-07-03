@@ -1,10 +1,9 @@
 export default class Fish extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, fishData) {
-        // ★ 古いテストID(F_001等)が来た場合の自動変換（救済措置）
         let finalId = fishData.id;
-        if (finalId === 'F_001') finalId = 'F_C11'; // グッピーに変換
-        if (finalId === 'F_002') finalId = 'F_R01'; // カクレクマノミに変換
-        if (finalId === 'F_003') finalId = 'F_R02'; // ナンヨウハギに変換
+        if (finalId === 'F_001') finalId = 'F_C11';
+        if (finalId === 'F_002') finalId = 'F_R01';
+        if (finalId === 'F_003') finalId = 'F_R02';
 
         super(scene, x, y, finalId);
         scene.add.existing(this);
@@ -13,19 +12,22 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
         this.setCollideWorldBounds(true);
 
         this.fish_id = fishData.uuid || Phaser.Math.RND.uuid();
-        this.fish_type_id = finalId; // 変換後のIDを適用
+        this.fish_type_id = finalId;
         this.max_hunger = fishData.max_hunger || 100;
         this.current_hunger = fishData.current_hunger !== undefined ? fishData.current_hunger : this.max_hunger;
         this.current_affection = fishData.current_affection !== undefined ? fishData.current_affection : 50.0;
         this.hunger_decay_rate = fishData.decay_rate || 0.05;
         this.status_state = fishData.status_state || 'NORMAL';
         
+        // ★ レベルと経験値データの初期化（セーブデータから復元、なければLv1から）
+        this.level = fishData.level || 1;
+        this.experience = fishData.experience || 0;
+
         this.targetX = x;
         this.targetY = y;
         this.swimSpeed = 40;
         this.isWaiting = false;
 
-        // ドロップ頻度のんびり化 (通常時 5分 / 不機嫌時 15分)
         this.drop_timer = this.status_state === 'ANXIOUS' ? 900 : 300;
         this.setRandomWaypoint();
         
@@ -97,6 +99,18 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
             this.current_affection = Math.max(0, this.current_affection - (0.05 * dt));
         } else if (this.current_hunger === 0) {
             this.current_affection = Math.max(0, this.current_affection - (0.2 * dt));
+        }
+
+        // ★ 経験値の加算とレベルアップ判定（1秒に1XP）
+        this.experience += dt;
+        let xpNeeded = this.level * 60; // 必要XP（Lv1->2は60XP、Lv2->3は120XP）
+        if (this.experience >= xpNeeded) {
+            this.experience -= xpNeeded;
+            this.level++;
+            
+            // 頭上に「LEVEL UP! ✨」と浮かび上がる可愛い演出エフェクト
+            let luText = this.scene.add.text(this.x, this.y - 45, 'LEVEL UP! ✨', { fontSize: '20px', fill: '#ffff00', fontStyle: 'bold' }).setOrigin(0.5);
+            this.scene.tweens.add({ targets: luText, y: this.y - 95, alpha: 0, duration: 1500, onComplete: () => luText.destroy() });
         }
 
         let previous_state = this.status_state;

@@ -8,7 +8,8 @@ window.saveGameState = function(scene) {
             activeFishes.push({
                 id: f.fish_type_id, uuid: f.fish_id, max_hunger: f.max_hunger,
                 current_hunger: f.current_hunger, current_affection: f.current_affection,
-                status_state: f.status_state, decay_rate: f.hunger_decay_rate
+                status_state: f.status_state, decay_rate: f.hunger_decay_rate,
+                level: f.level, experience: f.experience // ★ レベルと経験値もセーブデータに含める
             });
         });
         scene.registry.set('aquarium_fishes', activeFishes);
@@ -37,7 +38,6 @@ class BootScene extends Phaser.Scene {
             
             let aquariumFishes = data.aquarium_fishes || [];
             
-            // ★ セーブデータ内の古いテストお魚IDを新しいIDへ自動変換して救済
             aquariumFishes = aquariumFishes.map(fish => {
                 if (fish.id === 'F_001') fish.id = 'F_C11';
                 if (fish.id === 'F_002') fish.id = 'F_R01';
@@ -52,6 +52,19 @@ class BootScene extends Phaser.Scene {
                 aquariumFishes.forEach(fish => {
                     fish.current_hunger = Math.max(0, fish.current_hunger - (fish.decay_rate * offlineSeconds));
                     offlineDrops += Math.floor(offlineSeconds / 300);
+                    
+                    // ★ オフライン（放置中）の自動レベルアップ計算
+                    if (fish.status_state !== 'DEAD') {
+                        let currentLevel = fish.level || 1;
+                        let currentXp = (fish.experience || 0) + offlineSeconds; // 放置秒数＝獲得XP
+                        
+                        while (currentXp >= currentLevel * 60) {
+                            currentXp -= currentLevel * 60;
+                            currentLevel++;
+                        }
+                        fish.level = currentLevel;
+                        fish.experience = currentXp;
+                    }
                 });
                 offlineDrops = Math.min(50, offlineDrops);
             }
@@ -71,7 +84,7 @@ class BootScene extends Phaser.Scene {
 }
 
 class LobbyScene extends Phaser.Scene {
-    constructor() { super('LobbyScene'); }
+    constructor() { super('BootScene'); } // BootSceneのダミー空間を上書き
     create() {
         let bg = this.add.graphics();
         bg.fillGradientStyle(0x1a2a6c, 0x1a2a6c, 0xb21f1f, 0xfdbb2d, 1);
@@ -321,7 +334,7 @@ class AquariumScene extends Phaser.Scene {
                 this.input.setDraggable(item);
             }
             this.registry.set('offline_drops', 0);
-            let notify = this.add.text(640, 360, `オフライン報酬として\n${drops}個のアイテムを発見！`, { fontSize: '40px', fill: '#ffff00', fontStyle: 'bold', align: 'center', backgroundColor: '#000000aa' }).setOrigin(0.5);
+            let notify = this.add.text(640, 360, `オフライン報酬として\\n${drops}個のアイテムを発見！`, { fontSize: '40px', fill: '#ffff00', fontStyle: 'bold', align: 'center', backgroundColor: '#000000aa' }).setOrigin(0.5);
             this.time.delayedCall(4000, () => notify.destroy());
         }
 
@@ -342,29 +355,53 @@ class AquariumScene extends Phaser.Scene {
         window.saveGameState(this);
     }
 
+    // ★ お魚ステータス画面のアップデート（レベル表示と直接売却ボタンの追加）
     showFishStatusDialog(fish) {
         this.statusContainer.removeAll(true);
         this.statusContainer.setVisible(true);
 
         let modalBg = this.add.graphics();
-        modalBg.fillStyle(0x000000, 0.85);
-        modalBg.fillRect(390, 150, 500, 420);
+        modalBg.fillStyle(0x000000, 0.9);
+        modalBg.fillRect(390, 100, 500, 510); // ボタン枠のために少し高さを拡張
         this.statusContainer.add(modalBg);
 
-        let master = FishMaster.find(f => f.id === fish.fish_type_id) || { name: '不明な魚', rarity: 'Common', emoji_char: '🐟' };
+        let master = FishMaster.find(f => f.id === fish.fish_type_id) || { name: '不明な魚', rarity: 'Common', emoji_char: '🐟', sellPrice: 5 };
+
+        // ★ レベルアップボーナスの計算：1レベル上がるごとに対象魚の「基本売却額の50%」が上乗せされる！
+        let levelBonus = Math.floor(master.sellPrice * 0.5 * (fish.level - 1)); 
+        let currentSellPrice = master.sellPrice + levelBonus;
+
+        let xpNeeded = fish.level * 60;
 
         this.statusContainer.add([
-            this.add.text(640, 190, `${master.emoji_char} お魚のステータス`, { fontSize: '32px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5),
-            this.add.text(440, 260, `名前: ${master.name}`, { fontSize: '24px', fill: '#00ffff' }),
-            this.add.text(440, 310, `レアリティ: ${master.rarity}`, { fontSize: '24px', fill: '#ffcc00' }),
-            this.add.text(440, 360, `空腹度: ${Math.floor(fish.current_hunger)} / ${fish.max_hunger} %`, { fontSize: '24px', fill: '#fff' }),
-            this.add.text(440, 410, `好感度: ${Math.floor(fish.current_affection)} / 100 %`, { fontSize: '24px', fill: '#fff' }),
-            this.add.text(440, 460, `状態: ${fish.status_state}`, { fontSize: '24px', fill: fish.status_state === 'ANXIOUS' ? '#ff8888' : '#88ff88' })
+            this.add.text(640, 130, `${master.emoji_char} お魚のステータス`, { fontSize: '32px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5),
+            this.add.text(440, 190, `名前: ${master.name}`, { fontSize: '24px', fill: '#00ffff' }),
+            this.add.text(440, 240, `レアリティ: ${master.rarity}`, { fontSize: '24px', fill: '#ffcc00' }),
+            this.add.text(440, 290, `レベル: Lv.${fish.level}`, { fontSize: '24px', fill: '#ffff00', fontStyle: 'bold' }), // ★レベル表示
+            this.add.text(440, 330, `経験値: ${fish.experience} / ${xpNeeded} XP`, { fontSize: '18px', fill: '#cccccc' }), // ★XPバー文字
+            this.add.text(440, 380, `空腹度: ${Math.floor(fish.current_hunger)} / ${fish.max_hunger} %`, { fontSize: '24px', fill: '#fff' }),
+            this.add.text(440, 430, `好感度: ${Math.floor(fish.current_affection)} / 100 %`, { fontSize: '24px', fill: '#fff' }),
+            this.add.text(440, 480, `状態: ${fish.status_state}`, { fontSize: '24px', fill: fish.status_state === 'ANXIOUS' ? '#ff8888' : '#88ff88' })
         ]);
 
-        let closeBtn = this.add.text(640, 530, '✖ 閉じる', { fontSize: '22px', fill: '#fff', backgroundColor: '#555', padding: { x: 20, y: 8 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        // ★ 水槽内からの高値売却ボタンを追加！
+        let sellBtn = this.add.text(540, 550, `💰 育成売却 (💰${currentSellPrice})`, { fontSize: '20px', fill: '#fff', backgroundColor: '#cc6600', padding: {x:15, y:8} }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        sellBtn.on('pointerdown', () => {
+            if (confirm(`${master.name} (Lv.${fish.level}) を売却して 💰${currentSellPrice} コイン 獲得しますか？`)) {
+                let coins = this.registry.get('coins');
+                this.registry.set('coins', coins + currentSellPrice);
+                this.coinText.setText(`💰 コイン: ${this.registry.get('coins')}`);
+                fish.destroy();
+                this.updateCapacityText();
+                this.statusContainer.setVisible(false);
+                window.saveGameState(this);
+            }
+        });
+
+        let closeBtn = this.add.text(740, 550, '✖ 閉じる', { fontSize: '20px', fill: '#fff', backgroundColor: '#555', padding: { x: 15, y: 8 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
         closeBtn.on('pointerdown', () => this.statusContainer.setVisible(false));
-        this.statusContainer.add(closeBtn);
+        
+        this.statusContainer.add([sellBtn, closeBtn]);
     }
 
     updateCapacityText() {
@@ -555,7 +592,7 @@ class AquariumScene extends Phaser.Scene {
 
         let inventory = this.registry.get('inventory');
         let item = inventory[index];
-        let fishData = { id: item.id, max_hunger: 100, decay_rate: 0.05 };
+        let fishData = { id: item.id, max_hunger: 100, decay_rate: 0.05, level: 1, experience: 0 }; // ★初期Lv1
         let newFish = new Fish(this, 640, 360, fishData);
         this.fishes.add(newFish);
 
