@@ -19,7 +19,6 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
         this.hunger_decay_rate = fishData.decay_rate || 0.05;
         this.status_state = fishData.status_state || 'NORMAL';
         
-        // ★ レベルと経験値データの初期化（セーブデータから復元、なければLv1から）
         this.level = fishData.level || 1;
         this.experience = fishData.experience || 0;
 
@@ -28,7 +27,8 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
         this.swimSpeed = 40;
         this.isWaiting = false;
 
-        this.drop_timer = this.status_state === 'ANXIOUS' ? 900 : 300;
+        // ★ ひらっぱなし放置で意味がある時間に調整（通常時 60秒=1分 / 不機嫌時 180秒=3分）
+        this.drop_timer = this.status_state === 'ANXIOUS' ? 180 : 60;
         this.setRandomWaypoint();
         
         this.decayTimer = scene.time.addEvent({
@@ -101,14 +101,12 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
             this.current_affection = Math.max(0, this.current_affection - (0.2 * dt));
         }
 
-        // ★ 経験値の加算とレベルアップ判定（1秒に1XP）
         this.experience += dt;
-        let xpNeeded = this.level * 60; // 必要XP（Lv1->2は60XP、Lv2->3は120XP）
+        let xpNeeded = this.level * 60; 
         if (this.experience >= xpNeeded) {
             this.experience -= xpNeeded;
             this.level++;
             
-            // 頭上に「LEVEL UP! ✨」と浮かび上がる可愛い演出エフェクト
             let luText = this.scene.add.text(this.x, this.y - 45, 'LEVEL UP! ✨', { fontSize: '20px', fill: '#ffff00', fontStyle: 'bold' }).setOrigin(0.5);
             this.scene.tweens.add({ targets: luText, y: this.y - 95, alpha: 0, duration: 1500, onComplete: () => luText.destroy() });
         }
@@ -127,14 +125,15 @@ export default class Fish extends Phaser.Physics.Arcade.Sprite {
             this.clearTint();
         }
 
+        // ANXIOUSになった瞬間タイマーを180秒（3分）にリセット
         if (previous_state !== 'ANXIOUS' && this.status_state === 'ANXIOUS') {
-            this.drop_timer = 900;
+            this.drop_timer = 180;
         }
 
         this.drop_timer -= dt;
         if (this.drop_timer <= 0) {
             this.dropItem();
-            this.drop_timer = this.status_state === 'ANXIOUS' ? 900 : 300;
+            this.drop_timer = this.status_state === 'ANXIOUS' ? 180 : 60;
         }
     }
 

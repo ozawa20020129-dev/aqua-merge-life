@@ -51,7 +51,8 @@ class BootScene extends Phaser.Scene {
             if (offlineSeconds > 0 && aquariumFishes.length > 0) {
                 aquariumFishes.forEach(fish => {
                     fish.current_hunger = Math.max(0, fish.current_hunger - (fish.decay_rate * offlineSeconds));
-                    offlineDrops += Math.floor(offlineSeconds / 300);
+                    // 閉じていた時は1匹あたり1分（60秒）に1回ドロップとして計算
+                    offlineDrops += Math.floor(offlineSeconds / 60);
                     
                     if (fish.status_state !== 'DEAD') {
                         let currentLevel = fish.level || 1;
@@ -82,7 +83,6 @@ class BootScene extends Phaser.Scene {
     }
 }
 
-// ★ constructorの中身を「LobbyScene」に修正しました！
 class LobbyScene extends Phaser.Scene {
     constructor() { super('LobbyScene'); } 
     create() {
@@ -615,11 +615,13 @@ class AquariumScene extends Phaser.Scene {
     }
 }
 
+// ★ pauseOnBlur: false を追加！
 const config = {
     type: Phaser.AUTO,
     width: 1280,
     height: 720,
     parent: 'game-container',
+    pauseOnBlur: false, 
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
     scene: [BootScene, LobbyScene, GachaScene, CollectionScene, AquariumScene]
